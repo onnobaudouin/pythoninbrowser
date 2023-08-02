@@ -1,0 +1,276 @@
+<!doctype html>
+<html  lang="">
+
+<head>
+  <meta charset="utf-8">
+  <title>Python In Browser</title>
+  <meta name="description" content="">
+
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inconsolata&display=swap" rel="stylesheet">
+
+
+  <meta name="theme-color" content="#fafafa">
+
+
+<!--  &lt;!&ndash; shim for ES6 `Promise` builtin &ndash;&gt;-->
+<!--  <script src="pypy/Promise.min.js" type="text/javascript"></script>-->
+<!--  &lt;!&ndash; shim for off-main-thread function compilation &ndash;&gt;-->
+<!--  <script src="pypy/FunctionPromise.js" type="text/javascript"></script>-->
+<!--  <script src="pypy/pypyjs.js" type="text/javascript"></script>-->
+  <script src="ace/src-min-noconflict/ace.js" type="text/javascript" charset="utf-8"></script>
+  <script src="skulpt/skulpt.min.js" type="text/javascript"></script>
+  <script src="skulpt/skulpt-stdlib.js" type="text/javascript"></script>
+  <style>
+    main {
+      width: 100vw;
+      height: 100vh;
+      background: #555555;
+      padding: 0;
+      margin: 0;
+    }
+
+    pre {
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      padding: 0;
+      margin: 0;
+    }
+
+    html {
+      margin: 0;
+      padding: 0;
+    }
+
+    #editorArea {
+      width: 100%;
+      height: calc(60% - 20px);
+    }
+
+    #actionArea {
+      height: 40px;
+      width: 100%;
+      background: #222222;
+      display: flex;
+      align-content: center;
+      justify-content: center;
+      flex-direction: row;
+    }
+
+    #outputArea {
+      width: 100%;
+      height: calc(40% - 20px);
+      background: black;
+    }
+
+    #textEditorWrapper {
+      width: 100%;
+      height: calc(100% - 20px);
+    }
+
+    #editor {
+      font-family: 'Inconsolata', monospace;
+      box-sizing: border-box;
+      width: 100%;
+      height: 100%;
+      padding: 20px;
+      background: #222222;
+      color: lightgrey;
+      resize: none;
+      font-size: 20px;
+
+
+    }
+
+    button {
+      font-family: 'Inconsolata', monospace;
+      display: block;
+      background: gold;
+      border: 1px solid darkgoldenrod;
+      padding: 5px;
+      box-sizing: border-box;
+      border-radius: 3px;
+      font-weight: bold;
+      margin: 3px;
+    }
+
+    button.clear {
+      background: #222222;
+      color: whitesmoke;
+      border: 1px solid black;
+    }
+
+    #outputArea {
+      font-family: 'Inconsolata', monospace;
+      color: greenyellow;
+      overflow-y: scroll;
+      overflow-x: scroll;
+      box-sizing: border-box;
+      padding: 10px;
+    }
+
+    #outputArea p {
+      margin: 2px 0;
+    }
+
+    p.error {
+      color: darkred;
+    }
+
+  </style>
+</head>
+
+<body>
+<main>
+  <div id="editorArea">
+    <div id="textEditorWrapper">
+      <pre id="editor">
+# Python program to display all the prime numbers within an interval
+
+lower = 900
+upper = 1000
+
+print("Prime numbers between", lower, "and", upper, "are:")
+
+for num in range(lower, upper + 1):
+   # all prime numbers are greater than 1
+   if num > 1:
+       for i in range(2, num):
+           if (num % i) == 0:
+               break
+       else:
+           print(num)
+      </pre>
+    </div>
+  </div>
+  <div id="actionArea">
+    <button onclick="execute()">Run</button>
+    <button class="clear" onclick="clearOutput()">Clear</button>
+  </div>
+  <div id="outputArea">
+
+  </div>
+
+</main>
+</body>
+<script>
+
+
+  class Output {
+    constructor(id) {
+      this.element = document.getElementById(id);
+      this.clear();
+    }
+
+    clear() {
+      this.lines = [];
+      this.onModify();
+    }
+
+    onModify() {
+      this.element.innerHTML = this.lines.map(x => `<p class="${x.state}">&gt;&nbsp;${x.msg}</p>`).join('');
+    }
+
+    msg(msg) {
+      this.lines.unshift({state: 'ok', msg});
+      this.onModify();
+    }
+
+    error(msg) {
+      this.lines.unshift({state: 'error', msg});
+      this.onModify();
+    }
+  }
+</script>
+<script>
+  const output = new Output('outputArea');
+  const editor = ace.edit("editor");
+  editor.setTheme("ace/theme/monokai");
+  editor.session.setMode("ace/mode/python");
+
+  function builtinRead(x) {
+    if (Sk.builtinFiles === undefined || Sk.builtinFiles["files"][x] === undefined)
+      throw "File not found: '" + x + "'";
+    return Sk.builtinFiles["files"][x];
+  }
+
+  function outf(text) {
+    if(text.trim()!=='') {
+      output.msg(text);
+    }
+  }
+
+  Sk.pre = "output";
+  Sk.configure({output: outf, read: builtinRead});
+
+  async function execute() {
+    const code = editor.getValue();
+    output.msg('Compiling and running...');
+    var myPromise = Sk.misceval.asyncToPromise(function() {
+      return Sk.importMainWithBody("<stdin>", false, code, true);
+    });
+    myPromise.then(function(mod) {
+        console.log('success');
+      },
+      function(err) {
+       // console.log(err.toString());
+        output.error(err.toString());
+      });
+  }
+
+  // async function executeOld() {
+  //   const code = editor.getValue();
+  //   const lines = [code, 'hello'];
+  //   console.log(lines);
+  //   try {
+  //     output.msg('Compiling and running...');
+  //     await pypyjs.repl(() => {
+  //       return new Promise((resolve, reject) => {
+  //         if (lines.length > 0) {
+  //           const line = lines.shift();
+  //           console.log(line);
+  //           resolve(line)
+  //         } else {
+  //           reject('no code left');
+  //         }
+  //       });
+  //     });
+  //   } catch (err) {
+  //     console.error(err);
+  //     output.error(err.message);
+  //   }
+  // }
+
+  async function clearOutput() {
+    console.log('clear');
+    output.clear();
+  }
+
+
+</script>
+
+
+<script type="text/javascript">
+  //output.msg('Loading Python...');
+  // pypyjs.ready().then(function () {
+  //   // this callback is fired when the interpreter is ready for use.
+  //   output.msg('Python is ready!');
+  //   pypyjs.stdout = pypyjs.stderr = function (data) {
+  //     output.msg(data);
+  //   }
+  //   //pypyjs.stdin = function() {
+  //   //return 'hello\r\n';
+  //   // console.log('stdin', inpu);
+  //   // return new Promise(function(resolve, reject) {
+  //   //jqconsole.Prompt(true, function (input) {
+  //   //    console.log('stdin');
+  //   //      resolve('hello');
+  //   //    //});
+  //   // / });
+  //   // }
+  // })
+</script>
+</html>
